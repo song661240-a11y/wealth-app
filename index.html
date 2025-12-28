@@ -32,7 +32,7 @@
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        body { -webkit-tap-highlight-color: transparent; }
+        body { -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans antialiased selection:bg-indigo-100 touch-pan-y no-scrollbar">
@@ -89,7 +89,6 @@
             setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
           };
 
-          // 初始化登入
           useEffect(() => {
             const initAuth = async () => {
               try { await signInAnonymously(auth); } 
@@ -104,39 +103,30 @@
             return () => unsubscribe();
           }, []);
 
-          // 核心驗證邏輯 (單一密碼制)
           const handleAuth = async () => {
             if (!inputKey || inputKey.length < 4) { showToast('密碼請輸入至少 4 位數', 'error'); return; }
             setAuthLoading(true);
             try {
                 const accountRef = doc(db, 'accounts', inputKey);
                 const accountSnap = await getDoc(accountRef);
-                
                 if (accountSnap.exists()) {
-                    // 已有密碼，讀取對應的 UID
                     const data = accountSnap.data();
                     setTargetUid(data.ownerUid);
                     setActiveKey(inputKey);
                     showToast(`同步成功，歡迎回來`);
                 } else {
-                    // 全新密碼，將目前的匿名 UID 綁定給這組密碼
-                    await setDoc(accountRef, { 
-                        ownerUid: user.uid, 
-                        createdAt: new Date().toISOString() 
-                    });
+                    await setDoc(accountRef, { ownerUid: user.uid, createdAt: new Date().toISOString() });
                     setTargetUid(user.uid);
                     setActiveKey(inputKey);
-                    showToast(`新密碼已設定，資料已鎖定同步`);
-                    // 確保目前的資料立即寫入雲端
+                    showToast(`新密碼已設定，數據已同步`);
                     forceSave(assets, liabilities, records, user.uid);
                 }
                 setAccountModal(false);
                 setInputKey('');
-            } catch (error) { showToast('驗證失敗，請檢查網路', 'error'); }
+            } catch (error) { showToast('驗證失敗', 'error'); }
             setAuthLoading(false);
           };
 
-          // 數據同步
           useEffect(() => {
             if (!targetUid) return;
             setLoading(true);
@@ -150,7 +140,6 @@
                 setRecords(data.records || []);
                 setTimeout(() => { isRemoteUpdate.current = false; }, 800);
               } else {
-                // 如果是全新空間，給予預設範例
                 if (targetUid === user?.uid && !activeKey) {
                     setAssets([
                         { id: 1, name: '台股帳戶', amount: 0, category: 'invest', isForeign: false, foreignAmount: 0, exchangeRate: 1 },
@@ -264,7 +253,7 @@
                 {toast.message}
               </div>
 
-              {/* Account Modal (純密碼) */}
+              {/* Account Modal */}
               {accountModal.isOpen && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in">
                     <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden">
@@ -272,18 +261,12 @@
                             <button onClick={() => setAccountModal({isOpen: false})} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={20}/></button>
                             <Lock size={48} className="mx-auto mb-4 text-indigo-400" />
                             <h3 className="text-xl font-bold">同步密碼鎖</h3>
-                            <p className="text-xs text-slate-400 mt-2 leading-relaxed">輸入同一組密碼，即可在不同手機/電腦同步您的財富數據。</p>
+                            <p className="text-xs text-slate-400 mt-2 leading-relaxed">輸入同一組密碼，即可在不同裝置同步您的財富數據。</p>
                         </div>
                         <div className="p-6 space-y-6">
                             <div className="relative">
                                  <Key size={18} className="absolute left-3 top-4 text-slate-400" />
-                                 <input 
-                                    type="password" 
-                                    value={inputKey} 
-                                    onChange={(e) => setInputKey(e.target.value)} 
-                                    className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 text-center tracking-[0.5em] text-lg" 
-                                    placeholder="輸入自訂密碼" 
-                                 />
+                                 <input type="password" value={inputKey} onChange={(e) => setInputKey(e.target.value)} className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 text-center tracking-[0.5em] text-lg" placeholder="輸入自訂密碼" />
                             </div>
                             <button onClick={handleAuth} disabled={authLoading} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition flex items-center justify-center gap-2">
                                 {authLoading ? <Loader2 className="animate-spin" /> : <Check size={18} />}
@@ -377,26 +360,28 @@
                 )}
 
                 {activeTab === 'input' && (
-                  <div className="space-y-4 animate-fade-in pb-20">
+                  <div className="space-y-8 animate-fade-in pb-40"> {/* 加大底部 Padding 防止擋住按鈕 */}
                     {!activeKey && (
                         <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-sm text-amber-800 flex items-start gap-3">
                           <AlertTriangle size={20} className="shrink-0 text-amber-600" />
-                          <div><strong>重要：建議設定同步密碼</strong><p className="mt-1">點擊右上角鎖頭設定密碼，數據才能安全備份至雲端，並在不同裝置間同步。</p></div>
+                          <div><strong>尚未登入！</strong>點擊右上角鎖頭設定密碼，數據才能跨裝置同步。</div>
                         </div>
                     )}
-                    <div>
-                        <div className="flex justify-between items-center mb-3 px-1">
-                          <h3 className="font-bold text-emerald-800 flex items-center gap-2"><Wallet size={18} className="text-emerald-600"/> 資產</h3>
-                          <button onClick={() => addItem('asset')} className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full hover:bg-emerald-200 flex items-center gap-1 font-bold active:scale-95 transition shadow-sm border border-emerald-100"><Plus size={14} /> 新增</button>
+                    
+                    {/* 資產區塊 */}
+                    <section>
+                        <div className="flex justify-between items-center mb-4 px-1">
+                          <h3 className="font-bold text-emerald-800 flex items-center gap-2 text-lg"><Wallet size={20} className="text-emerald-600"/> 資產</h3>
+                          <button onClick={() => addItem('asset')} className="text-xs bg-emerald-100 text-emerald-700 px-4 py-2 rounded-full hover:bg-emerald-200 flex items-center gap-1 font-bold active:scale-95 transition shadow-sm border border-emerald-100"><Plus size={14} /> 新增資產</button>
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                           {assets.map((item) => (
                             <div key={item.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
                                 <div className="flex justify-between items-center mb-2">
                                     <select value={item.category} onChange={(e) => setAssets(prev => prev.map(p => p.id === item.id ? {...p, category: e.target.value} : p))} className="text-xs bg-slate-100 border-none rounded-lg py-1 px-2 text-slate-600 font-bold outline-none">
                                         <option value="invest">股票/投資</option><option value="cash">現金/存款</option><option value="real_estate">房地產</option><option value="other">其他</option>
                                     </select>
-                                    <button onClick={() => openDeleteModal('asset', item.id, item.name)} className="text-slate-300 p-1 hover:text-red-500 transition active:scale-90"><Trash2 size={16} /></button>
+                                    <button onClick={() => openDeleteModal('asset', item.id, item.name)} className="text-slate-300 p-2 hover:text-red-500 transition active:scale-90"><Trash2 size={16} /></button>
                                 </div>
                                 <input type="text" value={item.name} onChange={(e) => handleAssetChange(item.id, 'name', e.target.value)} className="w-full text-base font-bold text-slate-800 border-none p-0 mb-3 focus:ring-0" placeholder="項目名稱" />
                                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
@@ -414,20 +399,22 @@
                             </div>
                           ))}
                         </div>
-                    </div>
-                    <div className="mt-8">
-                        <div className="flex justify-between items-center mb-3 px-1">
-                          <h3 className="font-bold text-rose-800 flex items-center gap-2"><CreditCard size={18} className="text-rose-600"/> 負債</h3>
-                          <button onClick={() => addItem('liability')} className="text-xs bg-rose-100 text-rose-700 px-3 py-1.5 rounded-full hover:bg-rose-200 flex items-center gap-1 font-bold shadow-sm border border-rose-100 active:scale-95 transition"><Plus size={14} /> 新增</button>
+                    </section>
+
+                    {/* 負債區塊 */}
+                    <section>
+                        <div className="flex justify-between items-center mb-4 px-1">
+                          <h3 className="font-bold text-rose-800 flex items-center gap-2 text-lg"><CreditCard size={20} className="text-rose-600"/> 負債</h3>
+                          <button onClick={() => addItem('liability')} className="text-xs bg-rose-50 text-rose-700 px-4 py-2 rounded-full hover:bg-rose-100 flex items-center gap-1 font-bold shadow-sm border border-rose-100 active:scale-95 transition"><Plus size={14} /> 新增負債</button>
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                           {liabilities.map((item) => (
                             <div key={item.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
                                 <div className="flex justify-between items-center mb-2">
                                      <select value={item.category} onChange={(e) => setLiabilities(prev => prev.map(p => p.id === item.id ? {...p, category: e.target.value} : p))} className="text-xs bg-slate-100 border-none rounded-lg py-1 px-2 text-slate-600 font-bold outline-none">
                                         <option value="mortgage">房貸</option><option value="credit">信貸</option><option value="loan">借貸</option><option value="other">其他</option>
                                     </select>
-                                    <button onClick={() => openDeleteModal('liability', item.id, item.name)} className="text-slate-300 p-1 hover:text-red-500 transition active:scale-90"><Trash2 size={16} /></button>
+                                    <button onClick={() => openDeleteModal('liability', item.id, item.name)} className="text-slate-300 p-2 hover:text-red-500 transition active:scale-90"><Trash2 size={16} /></button>
                                 </div>
                                 <input type="text" value={item.name} onChange={(e) => setLiabilities(prev => prev.map(p => p.id === item.id ? {...p, name: e.target.value} : p))} className="w-full text-base font-bold text-slate-800 border-none p-0 mb-3 focus:ring-0" placeholder="項目名稱" />
                                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex items-center">
@@ -437,9 +424,14 @@
                             </div>
                           ))}
                         </div>
-                    </div>
-                    <div className="fixed bottom-20 left-0 w-full px-4 z-30">
-                      <button onClick={saveSnapshot} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-2xl shadow-2xl active:scale-95 transition-all"><Save size={18} /> 紀錄本月財報</button>
+                    </section>
+
+                    {/* 儲存按鈕 (不再固定，隨內容捲動) */}
+                    <div className="pt-6 pb-10">
+                      <button onClick={saveSnapshot} className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3">
+                        <Save size={20} /> 紀錄本月財報 (建立快照)
+                      </button>
+                      <p className="text-center text-slate-400 text-[10px] mt-4">提示：系統會自動保存您的變動至雲端</p>
                     </div>
                   </div>
                 )}
@@ -451,7 +443,7 @@
                            <div key={record.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3 hover:shadow-md transition">
                              <div className="flex justify-between items-start border-b border-slate-50 pb-2">
                                 <div><span className="text-xs text-slate-400 font-bold block">紀錄日期</span><span className="text-slate-800 font-bold">{record.date}</span></div>
-                                <button onClick={() => openDeleteModal('record', record.id, `${record.date} 的紀錄`)} className="text-slate-300 p-1 hover:text-red-500 transition active:scale-95"><Trash2 size={16} /></button>
+                                <button onClick={() => openDeleteModal('record', record.id, `${record.date} 的紀錄`)} className="text-slate-300 p-2 hover:text-red-500 transition active:scale-95"><Trash2 size={16} /></button>
                              </div>
                              <div className="grid grid-cols-3 gap-2 text-center">
                                 <div><span className="text-[10px] text-emerald-500 block mb-1 font-bold">總資產</span><span className="text-sm font-bold text-slate-700">{formatNumber(record.totalAssets)}</span></div>
